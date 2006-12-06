@@ -100,7 +100,7 @@ static uint32 get_free_fsid(const char *path)
     /* The 32:th bit is set to one on all special filehandles. The
        last 31 bits are hashed from the export point path. */
     hval = fnv1a_32(path, 0);
-    hval |= 0x10000000UL;
+    hval |= 0x80000000;
     return hval;
 }
 
