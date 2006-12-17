@@ -393,7 +393,7 @@ WRITE3res *nfsproc3_write_3_svc(WRITE3args * argp, struct svc_req * rqstp)
 {
     static WRITE3res result;
     char *path;
-    int fd, res;
+    int fd, res, res_close;
 
     PREP(path, argp->file);
     result.status = join(is_reg(), exports_rw());
@@ -407,21 +407,21 @@ WRITE3res *nfsproc3_write_3_svc(WRITE3args * argp, struct svc_req * rqstp)
 
 	    /* close for real if not UNSTABLE write */
 	    if (argp->stable == UNSTABLE)
-		fd_close(fd, FD_WRITE, FD_CLOSE_VIRT);
+		res_close = fd_close(fd, FD_WRITE, FD_CLOSE_VIRT);
 	    else
-		fd_close(fd, FD_WRITE, FD_CLOSE_REAL);
+		res_close = fd_close(fd, FD_WRITE, FD_CLOSE_REAL);
 
 	    /* we always do fsync(), never fdatasync() */
 	    if (argp->stable == DATA_SYNC)
 		argp->stable = FILE_SYNC;
 
-	    if (res != -1) {
+	    if (res != -1 && res_close != -1) {
 		result.WRITE3res_u.resok.count = res;
 		result.WRITE3res_u.resok.committed = argp->stable;
 		memcpy(result.WRITE3res_u.resok.verf, wverf,
 		       NFS3_WRITEVERFSIZE);
 	    } else {
-		/* error during write */
+		/* error during write or close */
 		result.status = write_write_err();
 	    }
 	} else
