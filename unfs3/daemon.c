@@ -110,6 +110,24 @@ short get_port(struct svc_req *rqstp)
 }
 
 /*
+ * return the socket type of the request (SOCK_STREAM or SOCK_DGRAM)
+ */
+int get_socket_type(struct svc_req *rqstp)
+{
+    int v;
+    socklen_t l;
+
+    l = sizeof(v);
+
+    if (getsockopt(rqstp->rq_xprt->xp_sock, SOL_SOCKET, SO_TYPE, &v, &l) < 0) {
+	logmsg(LOG_CRIT, "unable to determine socket type");
+	return -1;
+    }
+
+    return v;
+}
+
+/*
  * parse command line options
  */
 static void parse_options(int argc, char **argv)
@@ -649,7 +667,7 @@ static SVCXPRT *create_udp_transport(unsigned int port)
 	}
     }
 
-    transp = svcudp_create(sock);
+    transp = svcudp_bufcreate(sock, NFS_MAX_UDP_PACKET, NFS_MAX_UDP_PACKET);
 
     if (transp == NULL) {
 	fprintf(stderr, "%s\n", "cannot create udp service.");
