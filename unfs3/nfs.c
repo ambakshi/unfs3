@@ -53,8 +53,7 @@
  */
 #define PREP(p,f) do {						\
                       unfs3_fh_t *fh = (void *)f.data.data_val; \
-                      backend_setegid(0);                       \
-                      backend_seteuid(0);                       \
+                      switch_to_root();				\
                       p = fh_decomp(f);				\
                       if (exports_options(p, rqstp, NULL, NULL) == -1) { \
                           memset(&result, 0, sizeof(result));	\

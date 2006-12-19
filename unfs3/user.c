@@ -119,6 +119,18 @@ int has_group(int group, struct svc_req *req)
 }
 
 /*
+ * switch to root
+ */
+void switch_to_root()
+{
+    if (!can_switch)
+	return;
+
+    backend_setegid(0);
+    backend_seteuid(0);
+}
+
+/*
  * switch user and group id to values listed in request
  */
 void switch_user(struct svc_req *req)
