@@ -29,6 +29,7 @@ int get_socket_type(struct svc_req *rqstp);
 
 /* write verifier */
 extern writeverf3 wverf;
+void regenerate_write_verifier(void);
 
 /* options */
 extern int	opt_expire_writers;
