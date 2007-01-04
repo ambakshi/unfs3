@@ -49,6 +49,8 @@ typedef struct {
         uint32          password_hash;
 	struct in_addr	addr;
 	struct in_addr	mask;
+	uint32		anonuid;
+	uint32		anongid;
 	struct e_host	*next;
 } e_host;
 
@@ -66,6 +68,10 @@ typedef struct {
 static e_item *e_list = NULL;
 static e_item cur_item;
 static e_host cur_host;
+
+/* last looked-up anonuid and anongid */
+static uint32 last_anonuid = ANON_NOTSPECIAL;
+static uint32 last_anongid = ANON_NOTSPECIAL;
 
 /* mount protocol compatible variants */
 static exports ne_list = NULL;
@@ -113,6 +119,9 @@ static void clear_host(void)
 	memset(&cur_host, 0, sizeof(e_host));
 	strcpy(cur_host.orig, "<anon clnt>");
 	memset(&ne_host, 0, sizeof(struct groupnode));
+	
+	cur_host.anonuid =
+	cur_host.anongid = ANON_NOTSPECIAL; 
 }
 
 /*
@@ -367,6 +376,12 @@ static void add_option_with_value(const char *opt, const char *val)
 	/* Calculate hash */
 	cur_host.password_hash = fnv1a_32(cur_host.password, 0);
     }
+    else if (strcmp(opt,"anonuid") == 0) {
+    	cur_host.anonuid = atoi(val);
+    }
+    else if (strcmp(opt,"anongid") == 0) {
+    	cur_host.anongid = atoi(val);
+    }
 }
 
 /*
@@ -603,7 +618,7 @@ void exports_parse(void)
 /*
  * find a given host inside a host list, return options
  */
-static int find_host(struct in_addr remote, e_item *item,
+static e_host* find_host(struct in_addr remote, e_item *item,
 		     char **password, uint32 *password_hash)
 {
 	e_host *host;
@@ -615,11 +630,11 @@ static int find_host(struct in_addr remote, e_item *item,
 				*password = host->password;
 			if (password_hash != NULL)
      			        *password_hash = host->password_hash;
-			return host->options;
+			return host;
 		}
 		host = (e_host *) host->next;
 	}
-	return -1;
+	return NULL;
 }
 
 /* options cache */
@@ -635,9 +650,10 @@ int exports_options(const char *path, struct svc_req *rqstp,
 	e_item *list;
 	struct in_addr remote;
 	unsigned int last_len = 0;
-	int cur_opts;
 	
 	exports_opts = -1;
+	last_anonuid = ANON_NOTSPECIAL;
+	last_anongid = ANON_NOTSPECIAL;
 
 	/* check for client attempting to use invalid pathname */
 	if (!path || strstr(path, "/../"))
@@ -653,12 +669,14 @@ int exports_options(const char *path, struct svc_req *rqstp,
 		/* longest matching prefix wins */
 		if (strlen(list->path) > last_len    &&
 		    strstr(path, list->path) == path) {
-			cur_opts = find_host(remote, list, password, &export_password_hash);
+		    	e_host* cur_host = find_host(remote, list, password, &export_password_hash);
 			if (fsid != NULL)
 				*fsid = list->fsid;
-			if (cur_opts != -1) {
-				exports_opts = cur_opts;
+			if (cur_host) {
+				exports_opts = cur_host->options;
 				last_len = strlen(list->path);
+				last_anonuid = cur_host->anonuid;
+				last_anongid = cur_host->anongid;
 			}
 		}
 		list = (e_item *) list->next;
@@ -720,9 +738,15 @@ char *export_point_from_fsid(uint32 fsid, time_t **last_mtime, uint32 **dir_hash
 nfsstat3 exports_compat(const char *path, struct svc_req *rqstp)
 {
 	int prev;
+	uint32 prev_anonuid, prev_anongid;
 	
 	prev = exports_opts;
-	if (exports_options(path, rqstp, NULL, NULL) == prev)
+	prev_anonuid = last_anonuid;
+	prev_anongid = last_anongid;
+	
+	if (exports_options(path, rqstp, NULL, NULL) == prev &&
+	    last_anonuid == prev_anonuid &&
+	    last_anongid == prev_anongid)
 		return NFS3_OK;
 	else if (exports_opts == -1)
 		return NFS3ERR_ACCES;
@@ -739,4 +763,20 @@ nfsstat3 exports_rw(void)
 		return NFS3_OK;
 	else
 		return NFS3ERR_ROFS;
+}
+
+/*
+ * returns the last looked-up anonuid for a mount (ANON_NOTSPECIAL means none in effect)
+ */
+uint32 exports_anonuid(void)
+{
+	return last_anonuid;
+}
+
+/*
+ * returns the last looked-up anongid for a mount (ANON_NOTSPECIAL means none in effect)
+ */
+uint32 exports_anongid(void)
+{
+	return last_anongid;
 }
