@@ -14,6 +14,7 @@ Version 0.9.17
    - report unreadable executables as unreadable unless -r is used
    - support for using larger read and write sizes: up to 32K for UDP and 
      512K for TCP
+   - add support for "anonuid" and "anongid" export options
 
 Version 0.9.16
 
