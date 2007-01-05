@@ -11,13 +11,18 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef WIN32
 #include <syslog.h>
 #include <unistd.h>
+#include <sys/times.h>		       /* times */
+#endif				       /* WIN32 */
 #include <fcntl.h>
 #include <sys/time.h>		       /* gettimeofday */
-#include <sys/times.h>		       /* times */
 #include "md5.h"
+#include "backend.h"
+#include "daemon.h"		       /* logmsg */
 
+#ifndef WIN32
 int gen_nonce(char *nonce)
 {
     struct stat st;
@@ -50,6 +55,7 @@ int gen_nonce(char *nonce)
     md5_finish(&state, (md5_byte_t *) nonce);
     return 0;
 }
+#endif				       /* WIN32 */
 
 static char nibble_as_hexchar(unsigned char c)
 {

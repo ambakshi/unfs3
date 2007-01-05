@@ -16,6 +16,7 @@
 
 #include "nfs.h"
 #include "error.h"
+#include "backend.h"
 
 static int is_stale(void)
 {
@@ -40,6 +41,8 @@ nfsstat3 symlink_err(void)
 	return NFS3ERR_NOSPC;
     else if (errno == EDQUOT)
 	return NFS3ERR_DQUOT;
+    else if (errno == ENOSYS)
+	return NFS3ERR_NOTSUPP;
     else
 	return NFS3ERR_IO;
 }
@@ -88,6 +91,8 @@ nfsstat3 readlink_err(void)
 	return NFS3ERR_INVAL;
     else if (errno == EACCES)
 	return NFS3ERR_ACCES;
+    else if (errno == ENOSYS)
+	return NFS3ERR_NOTSUPP;
     else if (is_stale())
 	return NFS3ERR_STALE;
     else
@@ -216,6 +221,8 @@ nfsstat3 setattr_err(void)
 	return NFS3ERR_ACCES;
     else if (errno == EDQUOT)
 	return NFS3ERR_DQUOT;
+    else if (errno == EINVAL)
+	return NFS3ERR_INVAL;
     else
 	return NFS3ERR_IO;
 }

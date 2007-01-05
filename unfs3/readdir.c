@@ -54,17 +54,9 @@
  */
 #define NAME_SIZE(x) (((strlen((x))+3)/4)*4)
 
-/*
- * check if directory cookie is still valid
- */
-static int cookie_check(time_t time, cookieverf3 verf)
-{
-    return (int) (time == *(time_t *) verf);
-}
-
 uint32 directory_hash(const char *path)
 {
-    DIR *search;
+    backend_dirstream *search;
     struct dirent *this;
     uint32 hval = 0;
 
@@ -92,9 +84,9 @@ READDIR3res read_dir(const char *path, cookie3 cookie, cookieverf3 verf,
     READDIR3res result;
     READDIR3resok resok;
     static entry3 entry[MAX_ENTRIES];
-    struct stat buf;
+    backend_statstruct buf;
     int res;
-    DIR *search;
+    backend_dirstream *search;
     struct dirent *this;
     count3 i, real_count;
     static char obj[NFS_MAXPATHLEN * MAX_ENTRIES];
@@ -107,15 +99,16 @@ READDIR3res read_dir(const char *path, cookie3 cookie, cookieverf3 verf,
     /* account for size of information heading resok structure */
     real_count = RESOK_SIZE;
 
-    /* check verifier against directory's modification time */
-    if (cookie != 0 && !cookie_check(st_cache.st_mtime, verf)) {
-	result.status = NFS3ERR_BAD_COOKIE;
-	return result;
-    }
+    /* We are always returning zero as a cookie verifier. One reason for this 
+       is that stat() on Windows seems to return cached st_mtime values,
+       which gives spurious NFS3ERR_BAD_COOKIEs. Btw, here's what Peter
+       Staubach has to say about cookie verifiers:
 
-    /* compute new cookie verifier */
+       "From my viewpoint, the cookieverifier was a failed experiment in NFS
+       Version 3.  The semantics were never well understood nor supported by
+       many local file systems.  The Solaris NFS server always returns zeros
+       in the cookieverifier field." */
     memset(verf, 0, NFS3_COOKIEVERFSIZE);
-    *(time_t *) verf = st_cache.st_mtime;
 
     search = backend_opendir(path);
     if (!search) {

@@ -8,14 +8,19 @@
 
 #include <rpc/rpc.h>
 #include <limits.h>
+
+#ifdef WIN32
+#include "../winsupport.h"
+#else
 #include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <syslog.h>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#endif /* WIN32 */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "../nfs.h"
 #include "../mount.h"
@@ -176,6 +181,38 @@ static void add_host(void)
 	clear_host();
 }
 
+/* 
+   Normalize path, eliminating double slashes, etc. To be used instead
+   of realpath, when realpath is not possible. Normalizing export
+   points is important. Otherwise, mount requests might fail, since
+   /x/y is not a prefix of ///x///y/ etc.
+*/
+char *normpath(const char *path, char *normpath)
+{
+	char *n;
+	const char *p;
+
+	/* Copy path to normpath, and replace blocks of slashes with
+	   single slash */
+	p = path;
+	n = normpath;
+	while (*p) {
+		/* Skip over multiple slashes */
+		if (*p == '/' && *(p+1) == '/') {
+			p++;
+			continue;
+		}
+		*n++ = *p++;
+	}
+	*n = '\0';
+
+	/* Remove trailing slash, if any. */
+	if ((n - normpath) > 1 && *(n-1) == '/')
+		*(n-1) = '\0';
+
+	return normpath;
+}
+
 /*
  * add current item to current export list
  */
@@ -209,7 +246,7 @@ static void add_item(const char *path)
 	if (removable_for_all) {
 		/* If marked as removable for all hosts, don't try
 		   realpath. */
-		strncpy(buf, path, PATH_MAX);
+		normpath(path, buf);
 	} else if (!backend_realpath(path, buf)) {
 		logmsg(LOG_CRIT, "realpath for %s failed", path);
 		e_error = TRUE;
@@ -354,9 +391,14 @@ static void add_option(const char *opt)
 		cur_host.options |= OPT_RW;
 	else if (strcmp(opt,"ro") == 0)
 		cur_host.options &= ~OPT_RW;
-	else if (strcmp(opt,"removable") == 0)
+	else if (strcmp(opt,"removable") == 0) {
+#ifndef WIN32
 		cur_host.options |= OPT_REMOVABLE;
-	else if (strcmp(opt,"fixed") == 0)
+#else
+		logmsg(LOG_CRIT, "removable option is not supported on Windows");
+		e_error = TRUE;
+#endif /* WIN32 */
+	} else if (strcmp(opt,"fixed") == 0)
 		cur_host.options &= ~OPT_REMOVABLE;
 	else if (strcmp(opt,"insecure") == 0)
 		cur_host.options |= OPT_INSECURE;
@@ -668,8 +710,13 @@ int exports_options(const char *path, struct svc_req *rqstp,
 	while (list) {
 		/* longest matching prefix wins */
 		if (strlen(list->path) > last_len    &&
+#ifndef WIN32
 		    strstr(path, list->path) == path) {
-		    	e_host* cur_host = find_host(remote, list, password, &export_password_hash);
+#else
+		    !strnicmp(path, list->path, strlen(list->path))) {
+#endif
+		    e_host* cur_host = find_host(remote, list, password, &export_password_hash);
+
 			if (fsid != NULL)
 				*fsid = list->fsid;
 			if (cur_host) {

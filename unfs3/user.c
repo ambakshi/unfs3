@@ -7,13 +7,15 @@
 
 #include "config.h"
 
+#ifndef WIN32
 #include <pwd.h>
+#include <syslog.h>
+#include <unistd.h>
+#endif				       /* WIN32 */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <rpc/rpc.h>
 #include <stdlib.h>
-#include <syslog.h>
-#include <unistd.h>
 
 #include "nfs.h"
 #include "mount.h"
@@ -34,10 +36,10 @@ static int can_switch = TRUE;
  */
 void get_squash_ids(void)
 {
-    struct passwd *passwd;
+    backend_passwdstruct *passwd;
 
     if (can_switch) {
-	passwd = getpwnam("nobody");
+	passwd = backend_getpwnam("nobody");
 	if (passwd) {
 	    squash_uid = passwd->pw_uid;
 	    squash_gid = passwd->pw_gid;
@@ -176,7 +178,7 @@ void switch_user(struct svc_req *req)
 /*
  * re-switch to root for reading executable files
  */
-void read_executable(struct svc_req *req, struct stat buf)
+void read_executable(struct svc_req *req, backend_statstruct buf)
 {
     int have_exec = 0;
 

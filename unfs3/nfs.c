@@ -16,8 +16,6 @@
 #if HAVE_SYS_VMOUNT_H == 1
 #include <sys/vmount.h>		       /* AIX */
 #endif
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <rpc/rpc.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -26,6 +24,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <utime.h>
+#ifndef WIN32
+#include <sys/socket.h>
+#include <sys/un.h>
+#endif				       /* WIN32 */
 
 #if HAVE_STATVFS == 1
 # include <sys/statvfs.h>
@@ -187,7 +189,7 @@ LOOKUP3res *nfsproc3_lookup_3_svc(LOOKUP3args * argp, struct svc_req * rqstp)
     unfs3_fh_t *fh;
     char *path;
     char obj[NFS_MAXPATHLEN];
-    struct stat buf;
+    backend_statstruct buf;
     int res;
     uint32 gen;
 
@@ -348,7 +350,7 @@ READ3res *nfsproc3_read_3_svc(READ3args * argp, struct svc_req * rqstp)
 	argp->count = maxdata;
 
     if (result.status == NFS3_OK) {
-	fd = fd_open(path, argp->file, FD_READ);
+	fd = fd_open(path, argp->file, UNFS3_FD_READ);
 	if (fd != -1) {
 	    /* read one more to check for eof */
 	    res = backend_pread(fd, buf, argp->count + 1, argp->offset);
@@ -358,9 +360,9 @@ READ3res *nfsproc3_read_3_svc(READ3args * argp, struct svc_req * rqstp)
 
 	    /* close for real when hitting eof */
 	    if (result.READ3res_u.resok.eof)
-		fd_close(fd, FD_READ, FD_CLOSE_REAL);
+		fd_close(fd, UNFS3_FD_READ, FD_CLOSE_REAL);
 	    else {
-		fd_close(fd, FD_READ, FD_CLOSE_VIRT);
+		fd_close(fd, UNFS3_FD_READ, FD_CLOSE_VIRT);
 		res--;
 	    }
 
@@ -398,7 +400,7 @@ WRITE3res *nfsproc3_write_3_svc(WRITE3args * argp, struct svc_req * rqstp)
     result.status = join(is_reg(), exports_rw());
 
     if (result.status == NFS3_OK) {
-	fd = fd_open(path, argp->file, FD_WRITE);
+	fd = fd_open(path, argp->file, UNFS3_FD_WRITE);
 	if (fd != -1) {
 	    res =
 		backend_pwrite(fd, argp->data.data_val, argp->data.data_len,
@@ -406,9 +408,9 @@ WRITE3res *nfsproc3_write_3_svc(WRITE3args * argp, struct svc_req * rqstp)
 
 	    /* close for real if not UNSTABLE write */
 	    if (argp->stable == UNSTABLE)
-		res_close = fd_close(fd, FD_WRITE, FD_CLOSE_VIRT);
+		res_close = fd_close(fd, UNFS3_FD_WRITE, FD_CLOSE_VIRT);
 	    else
-		res_close = fd_close(fd, FD_WRITE, FD_CLOSE_REAL);
+		res_close = fd_close(fd, UNFS3_FD_WRITE, FD_CLOSE_REAL);
 
 	    /* we always do fsync(), never fdatasync() */
 	    if (argp->stable == DATA_SYNC)
@@ -451,7 +453,7 @@ static int store_create_verifier(char *obj, createverf3 verf)
 /*
  * check if a create verifier matches
  */
-static int check_create_verifier(struct stat *buf, createverf3 verf)
+static int check_create_verifier(backend_statstruct * buf, createverf3 verf)
 {
     return ((buf->st_atime ==
 	     (verf[0] | verf[1] << 8 | verf[2] << 16 | verf[3] << 24))
@@ -466,7 +468,7 @@ CREATE3res *nfsproc3_create_3_svc(CREATE3args * argp, struct svc_req * rqstp)
     char obj[NFS_MAXPATHLEN];
     sattr3 new_attr;
     int fd = -1, res = -1;
-    struct stat buf;
+    backend_statstruct buf;
     uint32 gen;
     int flags = O_RDWR | O_CREAT | O_TRUNC | O_NONBLOCK;
 
@@ -522,7 +524,7 @@ CREATE3res *nfsproc3_create_3_svc(CREATE3args * argp, struct svc_req * rqstp)
 	    result.status = NFS3ERR_IO;
 	}
 
-    } else {
+    } else if (result.status == NFS3_OK) {
 	/* open() failed */
 	if (argp->how.mode == EXCLUSIVE && errno == EEXIST) {
 	    /* Check if verifier matches */
@@ -649,6 +651,8 @@ SYMLINK3res *nfsproc3_symlink_3_svc(SYMLINK3args * argp,
     return &result;
 }
 
+#ifndef WIN32
+
 /*
  * create Unix socket
  */
@@ -671,6 +675,8 @@ static int mksocket(const char *path, mode_t mode)
     }
     return res;
 }
+
+#endif				       /* WIN32 */
 
 /*
  * check and process arguments to MKNOD procedure
@@ -933,7 +939,7 @@ FSSTAT3res *nfsproc3_fsstat_3_svc(FSSTAT3args * argp, struct svc_req * rqstp)
 {
     static FSSTAT3res result;
     char *path;
-    struct statvfs buf;
+    backend_statvfsstruct buf;
     int res;
 
     PREP(path, argp->fsroot);
@@ -1000,8 +1006,7 @@ FSINFO3res *nfsproc3_fsinfo_3_svc(FSINFO3args * argp, struct svc_req * rqstp)
     result.FSINFO3res_u.resok.maxfilesize = ~0ULL;
     result.FSINFO3res_u.resok.time_delta.seconds = 1;
     result.FSINFO3res_u.resok.time_delta.nseconds = 0;
-    result.FSINFO3res_u.resok.properties =
-	FSF3_LINK | FSF3_SYMLINK | FSF3_HOMOGENEOUS | FSF3_CANSETTIME;
+    result.FSINFO3res_u.resok.properties = backend_fsinfo_properties;
 
     return &result;
 }
@@ -1021,7 +1026,8 @@ PATHCONF3res *nfsproc3_pathconf_3_svc(PATHCONF3args * argp,
     result.PATHCONF3res_u.resok.name_max = NFS_MAXPATHLEN;
     result.PATHCONF3res_u.resok.no_trunc = TRUE;
     result.PATHCONF3res_u.resok.chown_restricted = FALSE;
-    result.PATHCONF3res_u.resok.case_insensitive = FALSE;
+    result.PATHCONF3res_u.resok.case_insensitive =
+	backend_pathconf_case_insensitive;
     result.PATHCONF3res_u.resok.case_preserving = TRUE;
 
     return &result;
