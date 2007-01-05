@@ -293,7 +293,7 @@ int fd_close(int fd, int kind, int really_close)
 	    res1 = backend_fsync(fd);
 
 	res2 = backend_close(fd);
-	
+
 	if (res1 != 0 || res2 != 0)
 	    regenerate_write_verifier();
 

@@ -714,9 +714,9 @@ static SVCXPRT *create_tcp_transport(unsigned int port)
  */
 void regenerate_write_verifier(void)
 {
-    *(wverf + 0)  = (uint32) getpid();
+    *(wverf + 0) = (uint32) getpid();
     *(wverf + 0) ^= rand();
-    *(wverf + 4)  = (uint32) time(NULL);
+    *(wverf + 4) = (uint32) time(NULL);
 }
 
 /*
@@ -737,7 +737,7 @@ int main(int argc, char **argv)
 	fprintf(stderr, "Error: extra arguments on command line\n");
 	exit(1);
     }
-    
+
     /* init write verifier */
     regenerate_write_verifier();
 
